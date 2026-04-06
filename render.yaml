@@ -1,0 +1,15 @@
+services:
+  # --- Backend API (Node.js + SQLite) ---
+  - type: web
+    name: newton-notes-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+    disk:
+      name: sqlite-data
+      mountPath: /data
+      sizeGB: 1

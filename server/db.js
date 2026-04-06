@@ -1,7 +1,9 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const dbPath = path.resolve(__dirname, 'questions.db');
+// On Render, use persistent disk at /data. Locally, use the server directory.
+const dbDir = process.env.NODE_ENV === 'production' ? '/data' : __dirname;
+const dbPath = path.join(dbDir, 'questions.db');
 const db = new Database(dbPath);
 
 // Initialize schema
