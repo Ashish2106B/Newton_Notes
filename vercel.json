@@ -1,5 +1,10 @@
 {
   "buildCommand": "cd client && npm install && npm run build",
   "outputDirectory": "client/dist",
-  "installCommand": "echo 'skip root install'"
+  "installCommand": "echo 'skip root install'",
+  "build": {
+    "env": {
+      "NODE_VERSION": "20"
+    }
+  }
 }
