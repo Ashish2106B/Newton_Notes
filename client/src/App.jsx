@@ -9,6 +9,7 @@ import {
   Cpu, Database, Layers, Monitor, Target, Zap, 
   Code, Command, Compass, Briefcase
 } from 'lucide-react';
+// eslint-disable-next-line
 import { motion, AnimatePresence } from 'framer-motion';
 
 
@@ -50,21 +51,15 @@ const RANDOM_ICONS = [
   <Briefcase size={64} strokeWidth={1.5} />
 ];
 
-const getColorForTopic = (topicName) => {
+const getGradientForTopic = (folderName) => {
   let hash = 0;
-  for (let i = 0; i < topicName.length; i++) hash = topicName.charCodeAt(i) + ((hash << 5) - hash);
-  return CUSTOM_COLORS[Math.abs(hash) % CUSTOM_COLORS.length];
-};
-
-const getGradientForTopic = (topicName) => {
-  let hash = 0;
-  for (let i = 0; i < topicName.length; i++) hash = topicName.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < folderName.length; i++) hash = folderName.charCodeAt(i) + ((hash << 5) - hash);
   return CUSTOM_GRADIENTS[Math.abs(hash) % CUSTOM_GRADIENTS.length];
 };
 
-const getIconForTopic = (topicName) => {
+const getIconForTopic = (folderName) => {
   let hash = 0;
-  for (let i = 0; i < topicName.length; i++) hash = topicName.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < folderName.length; i++) hash = folderName.charCodeAt(i) + ((hash << 5) - hash);
   return RANDOM_ICONS[Math.abs(hash) % RANDOM_ICONS.length];
 };
 
@@ -111,33 +106,62 @@ const LandingScreen = ({ onEnter }) => {
 function App() {
   const [hasEntered, setHasEntered] = useState(sessionStorage.getItem('hasEntered') === 'true');
   const [view, setView] = useState('home'); 
-  const [questions, setQuestions] = useState(() => {
-    const saved = localStorage.getItem('newton_notes_data');
-    return saved ? JSON.parse(saved) : [];
-  });
+  
+  const [questions, setQuestions] = useState([]);
   const [search, setSearch] = useState('');
-  const [selectedTopic, setSelectedTopic] = useState('all');
-  const [activeSubtopic, setActiveSubtopic] = useState('All');
-  const [sortBy] = useState('latest');
+  const [selectedFolder, setSelectedFolder] = useState('all');
   
   // Feedback states
   const [toast, setToast] = useState(null);
   
   // Anchor Popover State replaces all modals
   const [activePopover, setActivePopover] = useState(null); 
-  const [newQuestion, setNewQuestion] = useState({ title: '', url: '', subtopic: '' });
+  const [newQuestion, setNewQuestion] = useState({ title: '', url: '', difficulty: 'Medium' });
   const [newFolder, setNewFolder] = useState({ name: '' });
 
-  // Sync state to localStorage whenever questions change
   useEffect(() => {
-    localStorage.setItem('newton_notes_data', JSON.stringify(questions));
-  }, [questions]);
+    const normalizeData = (data) => {
+      if (!Array.isArray(data)) return [];
+      return data.map(q => ({
+        ...q,
+        folder: q.folder || 'General',
+        liked: q.liked || false
+      }));
+    };
 
-  useEffect(() => {
-    // Reset active subtopic when swapping views or topics
-    setActiveSubtopic('All');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTopic, view]);
+    if (window.chrome && window.chrome.storage && window.chrome.storage.local) {
+      // Load initial
+      window.chrome.storage.local.get(['questions'], (result) => {
+        setQuestions(normalizeData(result.questions));
+      });
+
+      // Listen for changes
+      const handleStorageChange = (changes, areaName) => {
+        if (areaName === 'local' && changes.questions) {
+          setQuestions(normalizeData(changes.questions.newValue));
+        }
+      };
+      
+      window.chrome.storage.onChanged.addListener(handleStorageChange);
+      return () => window.chrome.storage.onChanged.removeListener(handleStorageChange);
+    } else {
+      // Fallback
+      const saved = localStorage.getItem('questions');
+      if (saved) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setQuestions(normalizeData(JSON.parse(saved)));
+      }
+    }
+  }, []);
+
+  const updateStorage = (newQuestions) => {
+    setQuestions(newQuestions); // Optimistic UI update
+    if (window.chrome && window.chrome.storage && window.chrome.storage.local) {
+      window.chrome.storage.local.set({ questions: newQuestions });
+    } else {
+      localStorage.setItem('questions', JSON.stringify(newQuestions));
+    }
+  };
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -145,48 +169,34 @@ function App() {
   };
 
   // Derived state calculations
-  const topics = useMemo(() => {
-    const uniqueTopics = new Set(questions.map(q => q.topic).filter(Boolean));
+  const folders = useMemo(() => {
+    const uniqueTopics = new Set(questions.map(q => q.folder).filter(Boolean));
     return Array.from(uniqueTopics);
   }, [questions]);
 
-  const subtopics = useMemo(() => {
-    if (selectedTopic === 'all' || selectedTopic === 'starred') return [];
-    const uniqueSubtopics = new Set(
-      questions
-        .filter(q => q.topic === selectedTopic && q.subtopic && q.title !== '__FOLDER__')
-        .map(q => q.subtopic)
-    );
-    return Array.from(uniqueSubtopics);
-  }, [questions, selectedTopic]);
-
+    
   const stats = useMemo(() => {
-    const counts = {};
-    questions.forEach(q => {
+    return questions.reduce((acc, q) => {
       if (q.title !== '__FOLDER__') {
-        counts[q.topic] = (counts[q.topic] || 0) + 1;
+        acc[q.folder] = (acc[q.folder] || 0) + 1;
       }
-      if (q.isStarred) {
-        counts['starred'] = (counts['starred'] || 0) + 1;
+      if (q.liked) {
+        acc['liked'] = (acc['liked'] || 0) + 1;
       }
-    });
-    return counts;
+      return acc;
+    }, {});
   }, [questions]);
 
   // Derived questions view
+  
   const displayQuestions = useMemo(() => {
     let filtered = questions.filter(q => q.title !== '__FOLDER__');
     
-    // Topic filtering
-    if (selectedTopic === 'starred') {
-      filtered = filtered.filter(q => q.isStarred);
-    } else if (selectedTopic !== 'all') {
-      filtered = filtered.filter(q => q.topic === selectedTopic);
-    }
-    
-    // Subtopic filtering
-    if (selectedTopic !== 'all' && selectedTopic !== 'starred' && activeSubtopic !== 'All') {
-      filtered = filtered.filter(q => (q.subtopic || 'General') === activeSubtopic);
+    // Folder filtering
+    if (selectedFolder === 'liked') {
+      filtered = filtered.filter(q => q.liked);
+    } else if (selectedFolder !== 'all') {
+      filtered = filtered.filter(q => q.folder === selectedFolder);
     }
     
     // Search filtering
@@ -194,34 +204,36 @@ function App() {
       const s = search.toLowerCase();
       filtered = filtered.filter(q => 
         q.title.toLowerCase().includes(s) || 
-        q.topic.toLowerCase().includes(s) || 
-        (q.subtopic && q.subtopic.toLowerCase().includes(s))
+        q.folder.toLowerCase().includes(s)
       );
     }
     
-    // Sorting (can add sort implementation if needed, defaults to created order for now)
-    // Assuming new items are prepended in handlers
     return filtered;
-  }, [questions, selectedTopic, activeSubtopic, search]);
+  }, [questions, selectedFolder, search]);
 
   const ALL_FOLDERS = useMemo(() => {
-    const foldersMap = {};
-    PREBUILT_FOLDERS.forEach(f => { foldersMap[f.id] = f; });
-    topics.forEach(t => {
-      if (!foldersMap[t]) {
-        foldersMap[t] = { 
-           id: t, name: t, subtitle: 'User Collection', 
-           icon: getIconForTopic(t), 
-           className: 'folder-general',
-           dynamicBackground: getGradientForTopic(t)
-        };
-      }
-    });
-    return Object.values(foldersMap);
-  }, [topics]);
+    const initialMap = PREBUILT_FOLDERS.reduce((acc, f) => {
+      acc[f.id] = f;
+      return acc;
+    }, {});
+
+    return Object.values(
+      folders.reduce((acc, t) => {
+        if (!acc[t]) {
+          acc[t] = { 
+             id: t, name: t, subtitle: 'User Collection', 
+             icon: getIconForTopic(t), 
+             className: 'folder-general',
+             dynamicBackground: getGradientForTopic(t)
+          };
+        }
+        return acc;
+      }, initialMap)
+    );
+  }, [folders]);
 
   const updateQuestion = (id, data) => {
-    setQuestions(prev => prev.map(q => q.id === id ? { ...q, ...data } : q));
+    updateStorage(questions.map(q => q.id === id ? { ...q, ...data } : q));
     showToast('Updated successfully');
   };
 
@@ -235,16 +247,14 @@ function App() {
     const payload = {
        ...newQuestion,
        id: newId,
-       topic: selectedTopic,
-       subtopic: newQuestion.subtopic || (activeSubtopic !== 'All' ? activeSubtopic : 'General'),
-       status: 'unsolved',
-       isStarred: false,
-       createdAt: new Date().toISOString()
+       folder: selectedFolder !== 'all' && selectedFolder !== 'liked' ? selectedFolder : 'General',
+       difficulty: newQuestion.difficulty || 'Medium',
+       liked: false
     };
     
-    setQuestions(prev => [payload, ...prev]);
+    updateStorage([payload, ...questions]);
     setActivePopover(null);
-    setNewQuestion({ title: '', url: '', subtopic: '' });
+    setNewQuestion({ title: '', url: '', folder: '' });
     showToast('Question Added');
   };
 
@@ -255,11 +265,9 @@ function App() {
     }
     
     const newId = Date.now().toString();
-    const payload = view === 'home' 
-      ? { id: newId, title: '__FOLDER__', url: '#', topic: newFolder.name } 
-      : { id: newId, title: '__FOLDER__', url: '#', topic: selectedTopic, subtopic: newFolder.name };
+    const payload = { id: newId, title: '__FOLDER__', url: '#', folder: newFolder.name };
       
-    setQuestions(prev => [payload, ...prev]);
+    updateStorage([payload, ...questions]);
     setActivePopover(null);
     setNewFolder({ name: '' });
     showToast(view === 'home' ? 'Folder Created' : 'Sub-folder Created');
@@ -267,25 +275,20 @@ function App() {
 
   const confirmDeleteAction = (type, targetId) => {
     if (type === 'folder') {
-      setQuestions(prev => prev.filter(q => q.topic !== targetId));
+      updateStorage(questions.filter(q => q.folder !== targetId));
       setActivePopover(null);
       setView('home');
       showToast('Folder Deleted');
-    } else if (type === 'subfolder') {
-      setQuestions(prev => prev.filter(q => !(q.topic === targetId.topic && q.subtopic === targetId.subtopic)));
-      setActivePopover(null);
-      setActiveSubtopic('All');
-      showToast('Sub-Folder Deleted');
     } else if (type === 'question') {
-      setQuestions(prev => prev.filter(q => q.id !== targetId));
+      updateStorage(questions.filter(q => q.id !== targetId));
       setActivePopover(null);
       showToast('Removed Successfully');
     }
   };
 
-  const getTopicClass = (topic) => {
-    const folder = PREBUILT_FOLDERS.find(f => f.id === topic);
-    return folder ? `card-${folder.id.toLowerCase()}` : 'card-general';
+  const getTopicClass = (folder) => {
+    const pFolder = PREBUILT_FOLDERS.find(f => f.id === folder);
+    return pFolder ? `card-${pFolder.id.toLowerCase()}` : 'card-general';
   };
 
   const renderToast = () => (
@@ -338,7 +341,7 @@ function App() {
         {ALL_FOLDERS.map((f) => (
           <div key={f.id} className={`folder-card ${f.className} animate-slide`} 
                style={f.dynamicBackground ? { background: f.dynamicBackground } : {}} 
-               onClick={() => { setSelectedTopic(f.id); setView('dashboard'); }}>
+               onClick={() => { setSelectedFolder(f.id); setView('dashboard'); }}>
             <div className="pop-out-icon">
               {f.icon}
             </div>
@@ -367,14 +370,25 @@ function App() {
   const renderQuestionCard = (q) => (
     <motion.div layout key={q.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card animate-slide">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div className={`card-accent-bar ${getTopicClass(q.topic)}`}></div>
-        <button className={`star-btn ${q.isStarred ? 'active' : ''}`} style={{ position: 'relative', top: 0, right: 0 }} onClick={() => updateQuestion(q.id, { isStarred: !q.isStarred })}>
-          <Star size={20} fill={q.isStarred ? "#fbbf24" : "none"} color={q.isStarred ? "#fbbf24" : "#cbd5e1"} />
+        <div className={`card-accent-bar ${getTopicClass(q.folder)}`}></div>
+        <button className={`star-btn ${q.liked ? 'active' : ''}`} style={{ position: 'relative', top: 0, right: 0 }} onClick={() => updateQuestion(q.id, { liked: !q.liked })}>
+          <Star size={20} fill={q.liked ? "#fbbf24" : "none"} color={q.liked ? "#fbbf24" : "#cbd5e1"} />
         </button>
       </div>
       
       <h3 style={{ fontSize: '1.4rem', fontWeight: '800', marginBottom: '0.5rem', color: '#000' }}>{q.title}</h3>
-      <p style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: '600', marginBottom: '1.5rem' }}>{q.topic} • {q.subtopic}</p>
+      
+        <select 
+          className="folder-dropdown sidebar-item" 
+          value={q.folder} 
+          onChange={(e) => updateQuestion(q.id, { folder: e.target.value })}
+          style={{ background: '#f8fafc', padding: '0.2rem 0.5rem', borderRadius: '0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', appearance: 'auto', cursor: 'pointer' }}
+        >
+          {ALL_FOLDERS.map(f => (
+            <option key={f.id} value={f.id}>{f.name}</option>
+          ))}
+        </select>
+
       
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'auto' }}>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -426,10 +440,10 @@ function App() {
             <div className={`sidebar-item ${view === 'home' ? 'active' : ''}`} onClick={() => setView('home')}>
               <LayoutGrid size={20} /> Dashboard
             </div>
-            <div className={`sidebar-item ${selectedTopic === 'all' && view === 'dashboard' ? 'active' : ''}`} onClick={() => { setView('dashboard'); setSelectedTopic('all'); }}>
+            <div className={`sidebar-item ${selectedFolder === 'all' && view === 'dashboard' ? 'active' : ''}`} onClick={() => { setView('dashboard'); setSelectedFolder('all'); }}>
               <Hash size={20} /> All Lab
             </div>
-            <div className={`sidebar-item ${selectedTopic === 'starred' ? 'active' : ''}`} onClick={() => { setView('dashboard'); setSelectedTopic('starred'); }}>
+            <div className={`sidebar-item ${selectedFolder === 'starred' ? 'active' : ''}`} onClick={() => { setView('dashboard'); setSelectedFolder('starred'); }}>
               <Star size={20} /> Favorites
             </div>
           </nav>
@@ -437,36 +451,17 @@ function App() {
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
              <div>
                <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: '800', letterSpacing: '1px', marginBottom: '1.5rem' }}>POPULAR</p>
-               <div className="topic-list" style={{ paddingLeft: 0, border: 'none' }}>
-                {topics.slice(0, 5).map(t => (
-                  <div key={t} className={`sidebar-item ${selectedTopic === t ? 'active' : ''}`} onClick={() => { setView('dashboard'); setSelectedTopic(t); }} style={{ fontSize: '0.9rem' }}>#{t}</div>
+               <div className="folder-list" style={{ paddingLeft: 0, border: 'none' }}>
+                {folders.slice(0, 5).map(t => (
+                  <div key={t} className={`sidebar-item ${selectedFolder === t ? 'active' : ''}`} onClick={() => { setView('dashboard'); setSelectedFolder(t); }} style={{ fontSize: '0.9rem' }}>#{t}</div>
                 ))}
               </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
-              {view === 'dashboard' && activeSubtopic !== 'All' && (
-                <div style={{ position: 'relative' }}>
-                  <button className="sidebar-item hover-scale" style={{ background: 'rgba(239, 68, 68, 0.05)', color: '#ef4444', width: '100%', justifyContent: 'flex-start' }} 
-                          onClick={() => setActivePopover(activePopover === 'deleteSubfolder' ? null : 'deleteSubfolder')}>
-                    <Trash2 size={16} style={{ marginRight: '0.5rem' }} /> Delete Sub-Folder
-                  </button>
-                  <AnimatePresence>
-                     {activePopover === 'deleteSubfolder' && (
-                       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} 
-                                   style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: '0.5rem', background: '#fff', padding: '1rem', borderRadius: '1rem', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', zIndex: 100, width: '100%' }}>
-                         <p style={{ fontWeight: '800', marginBottom: '1rem', fontSize: '0.9rem' }}>Delete '{activeSubtopic}'?</p>
-                         <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
-                           <button className="btn sidebar-item" style={{ background: '#ef4444', color: '#fff', width: '100%' }} onClick={() => confirmDeleteAction('subfolder', { topic: selectedTopic, subtopic: activeSubtopic })}>Confirm Delete</button>
-                           <button className="btn sidebar-item" style={{ background: '#f1f5f9', width: '100%' }} onClick={() => setActivePopover(null)}>Cancel</button>
-                         </div>
-                       </motion.div>
-                     )}
-                  </AnimatePresence>
-                </div>
-              )}
+              
 
-              {view === 'dashboard' && selectedTopic !== 'all' && selectedTopic !== 'starred' && !PREBUILT_FOLDERS.find(f => f.id === selectedTopic) && (
+              {view === 'dashboard' && selectedFolder !== 'all' && selectedFolder !== 'starred' && !PREBUILT_FOLDERS.find(f => f.id === selectedFolder) && (
                 <div style={{ position: 'relative' }}>
                   <button className="sidebar-item hover-scale" style={{ background: '#ef4444', color: '#fff', width: '100%', justifyContent: 'flex-start' }} 
                           onClick={() => setActivePopover(activePopover === 'deleteFolder' ? null : 'deleteFolder')}>
@@ -476,9 +471,9 @@ function App() {
                      {activePopover === 'deleteFolder' && (
                        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} 
                                    style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: '0.5rem', background: '#fff', padding: '1rem', borderRadius: '1rem', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', zIndex: 100, width: '100%' }}>
-                         <p style={{ fontWeight: '800', marginBottom: '1rem', fontSize: '0.9rem', color: '#ef4444' }}>Warning: This deletes the entire topic and everything inside it forever.</p>
+                         <p style={{ fontWeight: '800', marginBottom: '1rem', fontSize: '0.9rem', color: '#ef4444' }}>Warning: This deletes the entire folder and everything inside it forever.</p>
                          <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
-                           <button className="btn sidebar-item" style={{ background: '#000', color: '#fff', width: '100%' }} onClick={() => confirmDeleteAction('folder', selectedTopic)}>Delete Everything</button>
+                           <button className="btn sidebar-item" style={{ background: '#000', color: '#fff', width: '100%' }} onClick={() => confirmDeleteAction('folder', selectedFolder)}>Delete Everything</button>
                            <button className="btn sidebar-item" style={{ background: '#f1f5f9', width: '100%' }} onClick={() => setActivePopover(null)}>Keep It</button>
                          </div>
                        </motion.div>
@@ -498,25 +493,10 @@ function App() {
               <header className="header-top">
                 <div className="nav-links">
                   <span className="nav-link" onClick={() => setView('home')} style={{ cursor: 'pointer' }}>HOME</span>
-                  <span className="nav-link active">{selectedTopic.toUpperCase()}</span>
+                  <span className="nav-link active">{selectedFolder.toUpperCase()}</span>
                 </div>
                 <div className="search-bar-modern">
-                  <div style={{ position: 'relative' }}>
-                    <button className="sidebar-item" style={{ background: '#8b5cf6', color: '#fff', padding: '0.4rem 1rem' }} onClick={() => setActivePopover(activePopover === 'addSubFolder' ? null : 'addSubFolder')}>+ Sub-Folder</button>
-                    <AnimatePresence>
-                       {activePopover === 'addSubFolder' && (
-                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} 
-                                     style={{ position: 'absolute', top: '100%', left: 0, marginTop: '0.5rem', background: '#fff', padding: '1rem', borderRadius: '1rem', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', zIndex: 100, width: '300px' }}>
-                           <p style={{ fontWeight: '800', marginBottom: '1rem' }}>Create Sub-Folder in "{selectedTopic}"</p>
-                           <input className="search-input" style={{ width: '100%', paddingLeft: '1rem', marginBottom: '1rem' }} placeholder="Sub-folder Name..." value={newFolder.name} onChange={(e) => setNewFolder({ name: e.target.value })} />
-                           <div style={{ display: 'flex', gap: '0.5rem' }}>
-                             <button className="btn sidebar-item" style={{ background: '#f1f5f9', flex: 1 }} onClick={() => setActivePopover(null)}>Cancel</button>
-                             <button className="btn sidebar-item" style={{ background: '#3b82f6', color: '#fff', flex: 1 }} onClick={handleAddFolder}>Create</button>
-                           </div>
-                         </motion.div>
-                       )}
-                     </AnimatePresence>
-                  </div>
+
 
                   <div style={{ position: 'relative' }}>
                     <button className="sidebar-item" style={{ background: '#000', color: '#fff', padding: '0.4rem 1rem' }} onClick={() => setActivePopover(activePopover === 'addQuestion' ? null : 'addQuestion')}>+ Question</button>
@@ -524,11 +504,11 @@ function App() {
                        {activePopover === 'addQuestion' && (
                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} 
                                      style={{ position: 'absolute', top: '100%', right: 0, marginTop: '0.5rem', background: '#fff', padding: '1.25rem', borderRadius: '1rem', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', zIndex: 100, width: '350px' }}>
-                           <p style={{ fontWeight: '800', marginBottom: '1rem' }}>Add Question to "{selectedTopic}"</p>
+                           <p style={{ fontWeight: '800', marginBottom: '1rem' }}>Add Question to "{selectedFolder}"</p>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
                              <input className="search-input" style={{ width: '100%', paddingLeft: '1rem', padding: '0.5rem 1rem' }} placeholder="Question Title..." value={newQuestion.title} onChange={(e) => setNewQuestion({...newQuestion, title: e.target.value})} />
                              <input className="search-input" style={{ width: '100%', paddingLeft: '1rem', padding: '0.5rem 1rem' }} placeholder="URL Link..." value={newQuestion.url} onChange={(e) => setNewQuestion({...newQuestion, url: e.target.value})} />
-                             <input className="search-input" style={{ width: '100%', paddingLeft: '1rem', padding: '0.5rem 1rem' }} placeholder={`Subtopic (${activeSubtopic !== 'All' ? activeSubtopic : 'General'})`} value={newQuestion.subtopic} onChange={(e) => setNewQuestion({...newQuestion, subtopic: e.target.value})} />
+                             <input className="search-input" style={{ width: '100%', paddingLeft: '1rem', padding: '0.5rem 1rem' }} placeholder="Difficulty (Easy/Medium/Hard)" value={newQuestion.difficulty || ''} onChange={(e) => setNewQuestion({...newQuestion, difficulty: e.target.value})} />
                            </div>
                            <div style={{ display: 'flex', gap: '0.5rem' }}>
                              <button className="btn sidebar-item" style={{ background: '#f1f5f9', flex: 1 }} onClick={() => setActivePopover(null)}>Cancel</button>
@@ -544,37 +524,10 @@ function App() {
                 </div>
               </header>
 
-              <div className="subtopic-container">
-                {selectedTopic !== 'all' && selectedTopic !== 'starred' && (
-                   <div className="subfolder-row" style={{ paddingBottom: '1rem' }}>
-                      <div className={`subfolder-tile hover-scale ${activeSubtopic === 'All' ? 'active' : ''}`} 
-                           style={{ 
-                             border: '2px solid var(--text-secondary)', 
-                             color: activeSubtopic === 'All' ? '#fff' : 'var(--text-secondary)',
-                             background: activeSubtopic === 'All' ? 'var(--text-secondary)' : '#fff',
-                             padding: '0.8rem 1.5rem', 
-                             fontSize: '1rem' 
-                           }}
-                           onClick={() => setActiveSubtopic('All')}>
-                          <FolderOpen size={20} /> <span style={{ fontWeight: 800 }}>All Notes</span>
-                      </div>
-                      {subtopics.map(sub => {
-                         const subColor = getColorForTopic(sub);
-                         const isActive = activeSubtopic === sub;
-                         return (
-                           <div key={sub} className={`subfolder-tile hover-scale ${isActive ? 'active' : ''}`} 
-                                style={{ 
-                                  border: `3px solid ${subColor}`, 
-                                  color: isActive ? '#fff' : subColor,
-                                  background: isActive ? subColor : '#fff',
-                                  padding: '0.8rem 1.5rem', 
-                                  fontSize: '1rem' 
-                                }}
-                                onClick={() => setActiveSubtopic(sub)}>
-                               <FolderOpen size={20} /> <span style={{ fontWeight: 800 }}>{sub}</span>
-                           </div>
-                         );
-                      })}
+              <div className="folder-container">
+                {selectedFolder !== 'all' && selectedFolder !== 'starred' && (
+                   <div className="folder-row" style={{ paddingBottom: '1rem' }}>
+
                    </div>
                 )}
 
