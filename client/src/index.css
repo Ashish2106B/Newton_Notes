@@ -159,16 +159,19 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4rem;
+  padding: 0.5rem 0;
 }
 
+
 .search-bar-modern {
-  background: #f1f5f9;
-  border-radius: 1.5rem;
-  padding: 0.8rem 1.5rem;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  width: 400px;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background: #f1f5f9;
+  border-radius: 999px;
+  width: 250px;
+  transition: all 0.3s ease;
 }
 
 .search-input {
@@ -177,8 +180,24 @@ body {
   outline: none;
   font-weight: 600;
   width: 100%;
+  font-size: 0.85rem;
   color: var(--text-primary);
 }
+
+textarea.search-input {
+  padding: 1rem;
+  line-height: 1.5;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.8rem;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+textarea.search-input:focus {
+  border-color: var(--accent-color);
+}
+
 
 /* Question List Redesign (Light High-Contrast) */
 .question-grid {
@@ -279,13 +298,18 @@ body {
 /* Breadcrumbs Sidebar Style */
 .nav-links {
   display: flex;
-  gap: 2rem;
+  gap: 1.5rem;
   font-weight: 700;
   color: var(--text-secondary);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
 }
 
-.nav-link.active { color: #000; }
+.nav-link.active { 
+  color: #000; 
+  opacity: 1;
+}
+
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar { width: 8px; }
@@ -355,6 +379,45 @@ body {
   100% { box-shadow: 0 0 20px rgba(255, 204, 0, 0.3); }
 }
 
-/* Animations (Reuse from earlier) */
+/* Animations */
 @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .animate-slide { animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1); }
+
+/* Folder General (custom folders) */
+.folder-general { background: linear-gradient(135deg, #667eea, #764ba2); box-shadow: 0 20px 40px rgba(102, 126, 234, 0.3); }
+
+/* Hover scale utility */
+.hover-scale { transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+.hover-scale:hover { transform: scale(1.03); }
+
+/* Blur utility for landing */
+.blur-sm { filter: blur(4px); pointer-events: none; }
+
+/* Toast Notification */
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 1rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+}
+.toast-success { background: #000; color: #fff; }
+.toast-error   { background: #ef4444; color: #fff; }
+
+/* Sidebar menu nav gap */
+.sidebar-menu { display: flex; flex-direction: column; gap: 0.4rem; }
+
+/* Card accent bars (topic colors) */
+.card-dsa     { background: #ff8c00; }
+.card-wap     { background: #3a7bd5; }
+.card-maths   { background: #ff5f6d; }
+.card-foai    { background: #8e2de2; }
+.card-general { background: #667eea; }
+

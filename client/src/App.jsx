@@ -1,101 +1,147 @@
 import React, { useState, useEffect, useMemo } from 'react';
-
-import { 
-  Search, CheckCircle, Circle, Trash2, ExternalLink, 
-  Star, Hash, LayoutGrid, Bookmark, ArrowRight,
-  FolderOpen, Settings, Filter, MoreVertical,
-  ChevronLeft, BookOpen, Globe, PenTool, BrainCircuit,
-  Info, X, AlertCircle, Check, Home, Menu, User,
-  Cpu, Database, Layers, Monitor, Target, Zap, 
-  Code, Command, Compass, Briefcase
+import {
+  Search, CheckCircle, Circle, Trash2, ExternalLink,
+  Hash, LayoutGrid, BookOpen, Globe, PenTool, BrainCircuit,
+  AlertCircle, Check, User,
+  Cpu, Database, Layers, Monitor, Target, Zap,
+  Code, Command, Compass, Briefcase, Heart, MoveRight, MoreVertical
 } from 'lucide-react';
-// eslint-disable-next-line
 import { motion, AnimatePresence } from 'framer-motion';
 
+// ─── Constants ───────────────────────────────────────────────────────────────
 
-const MagicBookImg = '/magic_book.png'; // Handled via public folder or relative path
-
-const PREBUILT_FOLDERS = [
-  { id: 'DSA', name: 'DSA', subtitle: 'Algorithms', icon: <BookOpen size={64} strokeWidth={1.5} />, className: 'folder-dsa' },
-  { id: 'WAP', name: 'WAP', subtitle: 'Web & Programming', icon: <Globe size={64} strokeWidth={1.5} />, className: 'folder-wap' },
-  { id: 'Maths', name: 'Maths', subtitle: 'Mathematics', icon: <PenTool size={64} strokeWidth={1.5} />, className: 'folder-maths' },
-  { id: 'FOAI', name: 'FOAI', subtitle: 'AI Foundations', icon: <BrainCircuit size={64} strokeWidth={1.5} />, className: 'folder-foai' },
-];
-
-const CUSTOM_COLORS = [
-  '#f43f5e', // Rose
-  '#10b981', // Emerald
-  '#8b5cf6', // Violet
-  '#f59e0b', // Amber
-  '#06b6d4'  // Cyan
-];
-
-const CUSTOM_GRADIENTS = [
-  'linear-gradient(135deg, #f43f5e, #fb923c)', // Rose-Orange
-  'linear-gradient(135deg, #10b981, #3b82f6)', // Emerald-Blue
-  'linear-gradient(135deg, #8b5cf6, #ec4899)', // Violet-Pink
-  'linear-gradient(135deg, #f59e0b, #ef4444)', // Amber-Red
-  'linear-gradient(135deg, #06b6d4, #3b82f6)'  // Cyan-Blue
-];
-
-const RANDOM_ICONS = [
-  <Cpu size={64} strokeWidth={1.5} />,
-  <Database size={64} strokeWidth={1.5} />,
-  <Layers size={64} strokeWidth={1.5} />,
-  <Monitor size={64} strokeWidth={1.5} />,
-  <Target size={64} strokeWidth={1.5} />,
-  <Zap size={64} strokeWidth={1.5} />,
-  <Code size={64} strokeWidth={1.5} />,
-  <Command size={64} strokeWidth={1.5} />,
-  <Compass size={64} strokeWidth={1.5} />,
-  <Briefcase size={64} strokeWidth={1.5} />
-];
-
-const getGradientForTopic = (folderName) => {
-  let hash = 0;
-  for (let i = 0; i < folderName.length; i++) hash = folderName.charCodeAt(i) + ((hash << 5) - hash);
-  return CUSTOM_GRADIENTS[Math.abs(hash) % CUSTOM_GRADIENTS.length];
+const PREBUILT_CONFIGS = {
+  DSA:     { subtitle: 'Algorithms',        IconComp: BookOpen,     className: 'folder-dsa'     },
+  WAP:     { subtitle: 'Web & Programming', IconComp: Globe,        className: 'folder-wap'     },
+  Maths:   { subtitle: 'Mathematics',       IconComp: PenTool,      className: 'folder-maths'   },
+  FOAI:    { subtitle: 'AI Foundations',    IconComp: BrainCircuit, className: 'folder-foai'    },
+  General: { subtitle: 'General Notes',     IconComp: Layers,       className: 'folder-general' },
 };
 
-const getIconForTopic = (folderName) => {
-  let hash = 0;
-  for (let i = 0; i < folderName.length; i++) hash = folderName.charCodeAt(i) + ((hash << 5) - hash);
-  return RANDOM_ICONS[Math.abs(hash) % RANDOM_ICONS.length];
+const DIFFICULTY_CFG = {
+  Easy:   { bg: '#dcfce7', text: '#16a34a', dot: '#22c55e' },
+  Medium: { bg: '#fef9c3', text: '#ca8a04', dot: '#eab308' },
+  Hard:   { bg: '#fee2e2', text: '#dc2626', dot: '#ef4444' },
 };
+
+const GRADIENTS = [
+  'linear-gradient(135deg,#f43f5e,#fb923c)',
+  'linear-gradient(135deg,#10b981,#3b82f6)',
+  'linear-gradient(135deg,#8b5cf6,#ec4899)',
+  'linear-gradient(135deg,#f59e0b,#ef4444)',
+  'linear-gradient(135deg,#06b6d4,#3b82f6)',
+];
+const ICONS = [Cpu, Database, Layers, Monitor, Target, Zap, Code, Command, Compass, Briefcase];
+
+const hash = (str) => {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+  return Math.abs(h);
+};
+const folderGradient = (n) => GRADIENTS[hash(n) % GRADIENTS.length];
+const folderIcon     = (n, sz = 64) => { const I = ICONS[hash(n) % ICONS.length]; return <I size={sz} strokeWidth={1.5} />; };
+
+// ─── Default Data ─────────────────────────────────────────────────────────────
+
+const DEFAULT_FOLDERS = ['General', 'DSA', 'WAP', 'Maths', 'FOAI'];
+const DEFAULT_SUBFOLDERS = {
+  General: ['All'],
+  DSA:     ['All', 'Arrays', 'Graphs', 'Trees', 'DP'],
+  WAP:     ['All', 'React', 'CSS', 'JavaScript'],
+  Maths:   ['All'],
+  FOAI:    ['All'],
+};
+
+// ─── localStorage helpers ────────────────────────────────────────────────────
+
+const loadQuestions = () => {
+  try {
+    const saved = localStorage.getItem('nn_questions');
+    let questions = saved ? JSON.parse(saved) : [];
+    
+    // If we have no questions, try migrating from legacy key
+    if (questions.length === 0) {
+      const legacy = localStorage.getItem('newton_notes_data');
+      if (legacy) {
+        const legacyData = JSON.parse(legacy);
+        questions = legacyData
+          .filter(q => q.title !== '__FOLDER__')
+          .map(q => ({
+            id: q.id || String(Date.now() + Math.random()),
+            title: q.title || 'Untitled',
+            url: q.url || '#',
+            difficulty: q.difficulty || 'Medium',
+            folder: q.topic || 'General',
+            subfolder: (q.subtopic && !['Uncategorized','General'].includes(q.subtopic)) ? q.subtopic : 'All',
+            liked: q.isStarred || q.liked || false,
+            status: q.status || 'unsolved',
+            createdAt: q.createdAt || new Date().toISOString(),
+          }));
+      }
+    }
+    
+    // Seed a welcome question if still empty
+    if (questions.length === 0) {
+      questions = [{
+        id: 'welcome',
+        title: 'Welcome to CN Track! Add your first question.',
+        url: 'https://github.com',
+        difficulty: 'Easy',
+        folder: 'General',
+        subfolder: 'All',
+        liked: true,
+        status: 'unsolved',
+        createdAt: new Date().toISOString()
+      }];
+    }
+
+    return questions;
+  } catch (e) { console.error('Load questions error:', e); return []; }
+};
+
+const loadFolders = () => {
+  try {
+    const saved = localStorage.getItem('nn_folders');
+    let currentFolders = saved ? JSON.parse(saved) : [...DEFAULT_FOLDERS];
+    
+    // Check legacy data for additional topics
+    const legacy = localStorage.getItem('newton_notes_data');
+    if (legacy) {
+      const legacyData = JSON.parse(legacy);
+      const topics = [...new Set(legacyData.filter(q => q.title !== '__FOLDER__' && q.topic).map(q => q.topic))];
+      topics.forEach(t => { 
+        if (t && !currentFolders.find(f => f.toLowerCase() === t.toLowerCase())) {
+          currentFolders.push(t);
+        }
+      });
+    }
+    
+    return currentFolders;
+  } catch (e) { return [...DEFAULT_FOLDERS]; }
+};
+
+
+const loadSubfolders = () => {
+  try {
+    const saved = localStorage.getItem('nn_subfolders');
+    if (saved) { const p = JSON.parse(saved); if (p && typeof p === 'object') return p; }
+  } catch (e) { /* ignore */ }
+  return { ...DEFAULT_SUBFOLDERS };
+};
+
+// ─── Landing Screen ───────────────────────────────────────────────────────────
 
 const LandingScreen = ({ onEnter }) => {
-  const [isOpening, setIsOpening] = useState(false);
-
-  const handleOpen = () => {
-    setIsOpening(true);
-    setTimeout(() => {
-      onEnter();
-    }, 800);
-  };
-
+  const [opening, setOpening] = useState(false);
+  const open = () => { setOpening(true); setTimeout(onEnter, 800); };
   return (
-    <motion.div 
-      className="landing-screen"
-      animate={{ opacity: isOpening ? 0 : 1 }}
-      transition={{ duration: 0.5, delay: 0.3 }}
-    >
+    <motion.div className="landing-screen" animate={{ opacity: opening ? 0 : 1 }} transition={{ duration: 0.5, delay: 0.3 }}>
       <div className="notebook-wrapper">
-        <motion.div 
-          className="cover-half cover-left" 
-          animate={{ x: isOpening ? -300 : 0 }}
-          transition={{ duration: 0.8, ease: "easeInOut" }}
-        />
-        <motion.div 
-          className="cover-half cover-right" 
-          animate={{ x: isOpening ? 300 : 0 }}
-          transition={{ duration: 0.8, ease: "easeInOut" }}
-        />
-        
-        {!isOpening && (
+        <motion.div className="cover-half cover-left"  animate={{ x: opening ? -300 : 0 }} transition={{ duration: 0.8, ease: 'easeInOut' }} />
+        <motion.div className="cover-half cover-right" animate={{ x: opening ?  300 : 0 }} transition={{ duration: 0.8, ease: 'easeInOut' }} />
+        {!opening && (
           <div style={{ position: 'absolute', zIndex: 100 }}>
-             <button className="open-notebook-btn" onClick={handleOpen}>
-               Open Notebook
-             </button>
+            <button className="open-notebook-btn" onClick={open}>Open Notebook</button>
           </div>
         )}
       </div>
@@ -103,198 +149,189 @@ const LandingScreen = ({ onEnter }) => {
   );
 };
 
+// ─── Popover wrapper ──────────────────────────────────────────────────────────
+
+const Pop = ({ children, open, from = 'bottom', style = {} }) => {
+  const isTop = from === 'top';
+  const init = isTop ? { opacity: 0, y: -10 } : { opacity: 0, y: 10 };
+  
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div 
+          initial={init} 
+          animate={{ opacity: 1, y: 0 }} 
+          exit={init}
+          style={{ 
+            position: 'absolute', 
+            [isTop ? 'bottom' : 'top']: 'calc(100% + 0.5rem)',
+            right: 0,
+            background: '#fff', 
+            padding: '1.25rem', 
+            borderRadius: '1.25rem',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', 
+            zIndex: 1000, 
+            border: '1px solid #f1f5f9',
+            minWidth: '220px',
+            ...style 
+          }}
+        >
+          {children}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
+
 function App() {
-  const [hasEntered, setHasEntered] = useState(sessionStorage.getItem('hasEntered') === 'true');
-  const [view, setView] = useState('home'); 
-  
-  const [questions, setQuestions] = useState([]);
-  const [search, setSearch] = useState('');
-  const [selectedFolder, setSelectedFolder] = useState('all');
-  
-  // Feedback states
-  const [toast, setToast] = useState(null);
-  
-  // Anchor Popover State replaces all modals
-  const [activePopover, setActivePopover] = useState(null); 
-  const [newQuestion, setNewQuestion] = useState({ title: '', url: '', difficulty: 'Medium' });
-  const [newFolder, setNewFolder] = useState({ name: '' });
+  const [hasEntered,       setHasEntered]       = useState(sessionStorage.getItem('hasEntered') === 'true');
+  const [view,             setView]             = useState('home');
+  const [questions,        setQuestions]        = useState(loadQuestions);
+  const [folders,          setFolders]          = useState(loadFolders);
+  const [subfolders,       setSubfolders]       = useState(loadSubfolders);
+  const [selectedFolder,   setSelectedFolder]   = useState('All');
+  const [selectedSubfolder,setSelectedSubfolder]= useState('All');
+  const [searchQuery,      setSearchQuery]      = useState('');
+  const [jsonInput,        setJsonInput]        = useState('');
+  const [toast,            setToast]            = useState(null);
+  const [activePopover,    setActivePopover]    = useState(null);
+  const [nfName,           setNfName]           = useState('');
 
-  useEffect(() => {
-    const normalizeData = (data) => {
-      if (!Array.isArray(data)) return [];
-      return data.map(q => ({
-        ...q,
-        folder: q.folder || 'General',
-        liked: q.liked || false
-      }));
-    };
+  // ── Persistence ──────────────────────────────────────────────────────────
+  useEffect(() => { localStorage.setItem('nn_questions',  JSON.stringify(questions));  }, [questions]);
+  useEffect(() => { localStorage.setItem('nn_folders',    JSON.stringify(folders));    }, [folders]);
+  useEffect(() => { localStorage.setItem('nn_subfolders', JSON.stringify(subfolders)); }, [subfolders]);
 
-    if (window.chrome && window.chrome.storage && window.chrome.storage.local) {
-      // Load initial
-      window.chrome.storage.local.get(['questions'], (result) => {
-        setQuestions(normalizeData(result.questions));
-      });
+  useEffect(() => { setSelectedSubfolder('All'); }, [selectedFolder, view]);
 
-      // Listen for changes
-      const handleStorageChange = (changes, areaName) => {
-        if (areaName === 'local' && changes.questions) {
-          setQuestions(normalizeData(changes.questions.newValue));
-        }
-      };
-      
-      window.chrome.storage.onChanged.addListener(handleStorageChange);
-      return () => window.chrome.storage.onChanged.removeListener(handleStorageChange);
-    } else {
-      // Fallback
-      const saved = localStorage.getItem('questions');
-      if (saved) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setQuestions(normalizeData(JSON.parse(saved)));
-      }
-    }
-  }, []);
-
-  const updateStorage = (newQuestions) => {
-    setQuestions(newQuestions); // Optimistic UI update
-    if (window.chrome && window.chrome.storage && window.chrome.storage.local) {
-      window.chrome.storage.local.set({ questions: newQuestions });
-    } else {
-      localStorage.setItem('questions', JSON.stringify(newQuestions));
-    }
-  };
-
+  // ── Toast ─────────────────────────────────────────────────────────────────
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Derived state calculations
-  const folders = useMemo(() => {
-    const uniqueTopics = new Set(questions.map(q => q.folder).filter(Boolean));
-    return Array.from(uniqueTopics);
-  }, [questions]);
+  // ── Handlers ─────────────────────────────────────────────────────────────
 
-    
-  const stats = useMemo(() => {
-    return questions.reduce((acc, q) => {
-      if (q.title !== '__FOLDER__') {
-        acc[q.folder] = (acc[q.folder] || 0) + 1;
-      }
-      if (q.liked) {
-        acc['liked'] = (acc['liked'] || 0) + 1;
-      }
-      return acc;
-    }, {});
-  }, [questions]);
+  const handleJSONAdd = () => {
+    try {
+      if (!jsonInput.trim()) return showToast('Please enter JSON', 'error');
+      const parsed = JSON.parse(jsonInput);
+      const items = Array.isArray(parsed) ? parsed : [parsed];
 
-  // Derived questions view
-  
-  const displayQuestions = useMemo(() => {
-    let filtered = questions.filter(q => q.title !== '__FOLDER__');
-    
-    // Folder filtering
-    if (selectedFolder === 'liked') {
-      filtered = filtered.filter(q => q.liked);
-    } else if (selectedFolder !== 'all') {
-      filtered = filtered.filter(q => q.folder === selectedFolder);
+      const validItems = items
+        .filter(item => item.title && item.url)
+        .filter(item => !questions.find(q => q.url === item.url))
+        .map(item => ({
+          id: Date.now().toString() + Math.random(),
+          title: item.title,
+          url: item.url,
+          difficulty: item.difficulty || 'Medium',
+          folder: item.folder || 'General',
+          subfolder: item.subfolder || 'All',
+          liked: item.liked || false,
+          status: 'unsolved',
+          createdAt: new Date().toISOString()
+        }));
+
+      if (validItems.length === 0) return showToast('No valid or new questions found', 'error');
+
+      setQuestions(prev => [...prev, ...validItems]);
+      setJsonInput('');
+      showToast(`${validItems.length} items added!`);
+    } catch (e) {
+      showToast('Invalid JSON format', 'error');
     }
-    
-    // Search filtering
-    if (search) {
-      const s = search.toLowerCase();
-      filtered = filtered.filter(q => 
-        q.title.toLowerCase().includes(s) || 
-        q.folder.toLowerCase().includes(s)
-      );
-    }
-    
-    return filtered;
-  }, [questions, selectedFolder, search]);
+  };
 
-  const ALL_FOLDERS = useMemo(() => {
-    const initialMap = PREBUILT_FOLDERS.reduce((acc, f) => {
-      acc[f.id] = f;
-      return acc;
-    }, {});
+  const addFolder = () => {
+    const name = nfName.trim();
+    if (!name) return showToast('Folder name required', 'error');
+    if (folders.includes(name)) return showToast('Folder already exists', 'error');
+    setFolders(prev => [...prev, name]);
+    setSubfolders(prev => ({ ...prev, [name]: ['All'] }));
+    setNfName('');
+    setActivePopover(null);
+    showToast('Folder Created');
+  };
 
-    return Object.values(
-      folders.reduce((acc, t) => {
-        if (!acc[t]) {
-          acc[t] = { 
-             id: t, name: t, subtitle: 'User Collection', 
-             icon: getIconForTopic(t), 
-             className: 'folder-general',
-             dynamicBackground: getGradientForTopic(t)
-          };
-        }
-        return acc;
-      }, initialMap)
+  const updateQuestion = (id, data) =>
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, ...data } : q));
+
+  const deleteQuestion = (id) => {
+    setQuestions(prev => prev.filter(q => q.id !== id));
+    showToast('Removed');
+  };
+
+  const addSubfolder = (folderName, subName) => {
+    const existing = subfolders[folderName] || ['All'];
+    if (existing.includes(subName)) return showToast('Exists', 'error');
+    setSubfolders(prev => ({ ...prev, [folderName]: [...existing, subName] }));
+  };
+
+  const deleteFolder = (folderName) => {
+    if (folderName === 'All' || folderName === 'General') return showToast('Cannot delete system folder', 'error');
+    setFolders(prev => prev.filter(f => f !== folderName));
+    setSubfolders(prev => {
+      const copy = { ...prev };
+      delete copy[folderName];
+      return copy;
+    });
+    setQuestions(prev => prev.filter(q => q.folder !== folderName));
+    setSelectedFolder('All');
+    showToast(`Folder "${folderName}" deleted`);
+    setActivePopover(null);
+  };
+
+  const deleteSubfolder = (folderName, subName) => {
+    if (subName === 'All') return showToast('Cannot delete default subfolder', 'error');
+    setSubfolders(prev => ({
+      ...prev,
+      [folderName]: (prev[folderName] || ['All']).filter(s => s !== subName)
+    }));
+    setQuestions(prev => prev.map(q => 
+      (q.folder === folderName && q.subfolder === subName) ? { ...q, subfolder: 'All' } : q
+    ));
+    setSelectedSubfolder('All');
+    showToast(`Subfolder "${subName}" removed`);
+    setActivePopover(null);
+  };
+
+  // ── Filtering Logic ────────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    const base = questions.filter(q => 
+      (selectedFolder === 'All' || q.folder === selectedFolder) &&
+      (selectedSubfolder === 'All' || q.subfolder === selectedSubfolder)
     );
-  }, [folders]);
+    if (!searchQuery) return base;
+    return base.filter(q => q.title.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [questions, selectedFolder, selectedSubfolder, searchQuery]);
 
-  const updateQuestion = (id, data) => {
-    updateStorage(questions.map(q => q.id === id ? { ...q, ...data } : q));
-    showToast('Updated successfully');
-  };
+  const stats = useMemo(() => {
+    const c = {};
+    questions.forEach(q => { c[q.folder] = (c[q.folder] || 0) + 1; });
+    return c;
+  }, [questions]);
 
-  const handleAddQuestion = () => {
-    if (!newQuestion.title || !newQuestion.url) {
-      showToast('Title and URL required', 'error');
-      return;
-    }
-    
-    const newId = Date.now().toString();
-    const payload = {
-       ...newQuestion,
-       id: newId,
-       folder: selectedFolder !== 'all' && selectedFolder !== 'liked' ? selectedFolder : 'General',
-       difficulty: newQuestion.difficulty || 'Medium',
-       liked: false
-    };
-    
-    updateStorage([payload, ...questions]);
-    setActivePopover(null);
-    setNewQuestion({ title: '', url: '', folder: '' });
-    showToast('Question Added');
+  // ── Shared input style ────────────────────────────────────────────────────
+  const inputStyle = {
+    width: '100%', padding: '0.5rem 0.75rem', borderRadius: '0.6rem',
+    border: '1px solid #e2e8f0', outline: 'none', fontWeight: '600',
+    fontSize: '0.85rem', marginBottom: '0.5rem', background: '#f8fafc',
   };
+  const selectStyle = { ...inputStyle, cursor: 'pointer' };
 
-  const handleAddFolder = () => {
-    if (!newFolder.name) {
-      showToast('Folder name required', 'error');
-      return;
-    }
-    
-    const newId = Date.now().toString();
-    const payload = { id: newId, title: '__FOLDER__', url: '#', folder: newFolder.name };
-      
-    updateStorage([payload, ...questions]);
-    setActivePopover(null);
-    setNewFolder({ name: '' });
-    showToast(view === 'home' ? 'Folder Created' : 'Sub-folder Created');
-  };
-
-  const confirmDeleteAction = (type, targetId) => {
-    if (type === 'folder') {
-      updateStorage(questions.filter(q => q.folder !== targetId));
-      setActivePopover(null);
-      setView('home');
-      showToast('Folder Deleted');
-    } else if (type === 'question') {
-      updateStorage(questions.filter(q => q.id !== targetId));
-      setActivePopover(null);
-      showToast('Removed Successfully');
-    }
-  };
-
-  const getTopicClass = (folder) => {
-    const pFolder = PREBUILT_FOLDERS.find(f => f.id === folder);
-    return pFolder ? `card-${pFolder.id.toLowerCase()}` : 'card-general';
-  };
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER HELPERS
+  // ─────────────────────────────────────────────────────────────────────────
 
   const renderToast = () => (
     <AnimatePresence>
       {toast && (
-        <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className={`toast toast-${toast.type}`}>
+        <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+          className={`toast toast-${toast.type}`}>
           {toast.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
           {toast.message}
         </motion.div>
@@ -304,241 +341,239 @@ function App() {
 
 
 
-  const renderHomeScreen = () => (
-    <div className="animate-slide">
-      <header style={{ marginBottom: '4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '3.5rem', fontWeight: '900', color: '#000' }}>Characters</h1>
-          <p style={{ color: 'var(--text-secondary)', fontWeight: '600' }}>Master your data structures and algorithms.</p>
+  const renderCard = (q) => {
+    const dc  = DIFFICULTY_CFG[q.difficulty] || DIFFICULTY_CFG.Medium;
+    const isSettingsOpen = activePopover === `settings-${q.id}`;
+    const isDeleteOpen   = activePopover === `delete-${q.id}`;
+
+    return (
+      <motion.div layout key={q.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: '0.65rem', fontWeight: '800', background: dc.bg, color: dc.text, padding: '0.15rem 0.5rem', borderRadius: '1rem', border: `1px solid ${dc.dot}`, textTransform: 'uppercase' }}>
+              {q.difficulty}
+            </span>
+            <h3 style={{ marginTop: '0.6rem', fontSize: '1.2rem', fontWeight: '900', color: '#000', lineHeight: '1.4' }}>{q.title}</h3>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+            {/* Hidden Settings (Folder/Subfolder) */}
+            <div style={{ position: 'relative' }}>
+              <button className={`sidebar-item ${isSettingsOpen ? 'active' : ''}`}
+                style={{ background: 'transparent', padding: '0.4rem', borderRadius: '0.5rem' }}
+                onClick={() => setActivePopover(isSettingsOpen ? null : `settings-${q.id}`)}>
+                <MoreVertical size={18} color="#64748b" />
+              </button>
+              <Pop open={isSettingsOpen} from="bottom" style={{ width: '240px' }}>
+                <p style={{ fontWeight: '800', fontSize: '0.75rem', marginBottom: '0.75rem', opacity: 0.5 }}>MOVE TO...</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <select className="search-input" style={{ ...inputStyle, padding: '0.4rem' }}
+                    value={q.folder} onChange={e => updateQuestion(q.id, { folder: e.target.value, subfolder: 'All' })}>
+                    {folders.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                  <select className="search-input" style={{ ...inputStyle, padding: '0.4rem' }}
+                    value={q.subfolder} onChange={e => updateQuestion(q.id, { subfolder: e.target.value })}>
+                    {(subfolders[q.folder] || ['All']).map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </Pop>
+            </div>
+
+            {/* Confirm Delete */}
+            <div style={{ position: 'relative' }}>
+              <button className="sidebar-item"
+                style={{ background: 'transparent', padding: '0.4rem', borderRadius: '0.5rem' }}
+                onClick={() => setActivePopover(isDeleteOpen ? null : `delete-${q.id}`)}>
+                <Trash2 size={16} color="#ef4444" />
+              </button>
+              <Pop open={isDeleteOpen} from="bottom" style={{ width: '200px' }}>
+                <p style={{ fontWeight: '800', marginBottom: '0.5rem', fontSize: '0.85rem', color: '#dc2626' }}>Delete Permanently?</p>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button className="sidebar-item" style={{ background: '#f1f5f9', flex: 1, fontSize: '0.8rem' }} onClick={() => setActivePopover(null)}>No</button>
+                  <button className="sidebar-item" style={{ background: '#dc2626', color: '#fff', flex: 1, fontSize: '0.8rem' }} 
+                    onClick={() => { deleteQuestion(q.id); setActivePopover(null); }}>Yes</button>
+                </div>
+              </Pop>
+            </div>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-           <div style={{ position: 'relative' }}>
-             <button className="sidebar-item hover-scale" style={{ background: '#8b5cf6', color: '#fff', fontWeight: '700' }} onClick={() => setActivePopover(activePopover === 'addFolderHome' ? null : 'addFolderHome')}>+ New Folder</button>
-             <AnimatePresence>
-               {activePopover === 'addFolderHome' && (
-                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} 
-                             style={{ position: 'absolute', top: '100%', right: 0, marginTop: '0.5rem', background: '#fff', padding: '1rem', borderRadius: '1rem', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', zIndex: 100, width: '300px' }}>
-                   <p style={{ fontWeight: '800', marginBottom: '1rem' }}>Create New Folder</p>
-                   <input className="search-input" style={{ width: '100%', paddingLeft: '1rem', marginBottom: '1rem' }} placeholder="Folder Name..." value={newFolder.name} onChange={(e) => setNewFolder({ name: e.target.value })} />
-                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                     <button className="btn sidebar-item" style={{ background: '#f1f5f9', flex: 1 }} onClick={() => setActivePopover(null)}>Cancel</button>
-                     <button className="btn sidebar-item" style={{ background: '#3b82f6', color: '#fff', flex: 1 }} onClick={handleAddFolder}>Create</button>
-                   </div>
-                 </motion.div>
-               )}
-             </AnimatePresence>
-           </div>
-           
-           <div className="search-bar-modern">
-             <Search size={20} color="#64748b" />
-             <input className="search-input" placeholder="Search my base..." value={search} onChange={(e) => setSearch(e.target.value)} />
-           </div>
-           <button className="sidebar-item" style={{ background: '#000', color: '#fff' }}><User size={18} /> Profile</button>
+
+        <a href={q.url} target="_blank" rel="noreferrer" className="sidebar-item" 
+           style={{ background: '#000', color: '#fff', justifyContent: 'center', marginTop: '1.25rem' }}>
+          Open Question <ExternalLink size={14} style={{ marginLeft: '0.5rem' }} />
+        </a>
+      </motion.div>
+    );
+  };
+
+  // ── Dashboard View ────────────────────────────────────────────────────────
+  const renderDashboard = () => (
+    <div className="animate-slide">
+      <header className="header-top" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+          <div className="nav-links">
+            <span className="nav-link" onClick={() => setView('home')} style={{ cursor: 'pointer', opacity: 0.5 }}>HOME</span>
+            <span className="nav-link active" style={{ fontWeight: 800 }}>{selectedFolder.toUpperCase()}</span>
+          </div>
+          <div className="search-bar-modern" style={{ width: '350px' }}>
+            <Search size={18} color="#64748b" />
+            <input className="search-input" placeholder="Search questions..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+          </div>
+        </div>
+
+        <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '1.5rem', width: '100%', border: '1px solid #e2e8f0' }}>
+          <p style={{ fontWeight: '800', fontSize: '0.85rem', marginBottom: '0.75rem', opacity: 0.6 }}>PASTE JSON DATA</p>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <textarea 
+              style={{ ...inputStyle, flex: 1, minHeight: '80px', fontFamily: 'monospace', resize: 'vertical' }}
+              placeholder='[ { "title": "Example", "url": "https://..." } ]'
+              value={jsonInput} onChange={e => setJsonInput(e.target.value)}
+            />
+            <button className="sidebar-item" 
+              style={{ background: '#000', color: '#fff', height: 'fit-content', padding: '0.8rem 1.5rem' }}
+              onClick={handleJSONAdd}>
+              Add Question
+            </button>
+          </div>
         </div>
       </header>
-      
-      <div className="folder-grid">
-        {ALL_FOLDERS.map((f) => (
-          <div key={f.id} className={`folder-card ${f.className} animate-slide`} 
-               style={f.dynamicBackground ? { background: f.dynamicBackground } : {}} 
-               onClick={() => { setSelectedFolder(f.id); setView('dashboard'); }}>
-            <div className="pop-out-icon">
-              {f.icon}
-            </div>
-            <div>
-              <h3 className="folder-name">{f.name}</h3>
-              <p className="folder-subtitle">{f.subtitle}</p>
-            </div>
-            <p style={{ marginTop: '1.5rem', fontWeight: '800', fontSize: '0.9rem' }}>{stats[f.id] || 0} ITEMS</p>
-          </div>
-        ))}
-      </div>
 
-      <footer style={{ marginTop: '5rem', display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontWeight: '700' }}>
-        <div style={{ display: 'flex', gap: '2rem' }}>
-          <span>DSA.Lab</span>
-          <span>WAP.Studio</span>
+      {/* Subfolder Toggle */}
+      {selectedFolder !== 'All' && (
+        <div style={{ display: 'flex', gap: '0.75rem', margin: '2rem 0', flexWrap: 'wrap' }}>
+          {(subfolders[selectedFolder] || ['All']).map(sub => (
+            <button key={sub} className={`sidebar-item ${selectedSubfolder === sub ? 'active' : ''}`}
+              style={{ borderRadius: '999px', fontSize: '0.8rem', padding: '0.5rem 1.25rem' }}
+              onClick={() => setSelectedSubfolder(sub)}>
+              {sub}
+            </button>
+          ))}
+          <button className="sidebar-item" style={{ borderRadius: '999px', fontSize: '0.8rem', background: '#f1f5f9' }}
+            onClick={() => {
+              const res = prompt('Subfolder name:');
+              if (res) addSubfolder(selectedFolder, res);
+            }}>
+            + Add Subfolder
+          </button>
         </div>
-        <div style={{ display: 'flex', gap: '2rem', color: '#000' }}>
-          <span style={{ opacity: 0.4 }}>PREV</span>
-          <span>NEXT &gt;</span>
-        </div>
-      </footer>
+      )}
+
+      <div className="question-grid">
+        <AnimatePresence>
+          {filtered.length === 0 ? (
+            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '5rem 0', color: 'var(--text-secondary)' }}>
+              <AlertCircle size={48} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />
+              <p style={{ fontWeight: '800', fontSize: '1.2rem' }}>No questions found.</p>
+            </div>
+          ) : (
+            filtered.map(q => renderCard(q))
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 
-  const renderQuestionCard = (q) => (
-    <motion.div layout key={q.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card animate-slide">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div className={`card-accent-bar ${getTopicClass(q.folder)}`}></div>
-        <button className={`star-btn ${q.liked ? 'active' : ''}`} style={{ position: 'relative', top: 0, right: 0 }} onClick={() => updateQuestion(q.id, { liked: !q.liked })}>
-          <Star size={20} fill={q.liked ? "#fbbf24" : "none"} color={q.liked ? "#fbbf24" : "#cbd5e1"} />
-        </button>
+  const renderHome = () => (
+    <div className="animate-slide">
+      <header style={{ marginBottom: '4rem' }}>
+        <h1 style={{ fontSize: '3.5rem', fontWeight: '900', color: '#000' }}>Question Dashboard</h1>
+        <p style={{ color: 'var(--text-secondary)', fontWeight: '600' }}>Full functional study base control.</p>
+      </header>
+      
+      <div className="folder-grid">
+        {folders.map(name => {
+          const cfg = PREBUILT_CONFIGS[name] || { className: 'folder-general' };
+          return (
+            <div key={name} className={`folder-card ${cfg.className}`}
+              onClick={() => { setSelectedFolder(name); setView('dashboard'); }}>
+              <div className="pop-out-icon">
+                {folderIcon(name)}
+              </div>
+              <h3 className="folder-name">{name}</h3>
+              <p style={{ fontWeight: '800', fontSize: '0.9rem' }}>{stats[name] || 0} ITEMS</p>
+            </div>
+          );
+        })}
       </div>
-      
-      <h3 style={{ fontSize: '1.4rem', fontWeight: '800', marginBottom: '0.5rem', color: '#000' }}>{q.title}</h3>
-      
-        <select 
-          className="folder-dropdown sidebar-item" 
-          value={q.folder} 
-          onChange={(e) => updateQuestion(q.id, { folder: e.target.value })}
-          style={{ background: '#f8fafc', padding: '0.2rem 0.5rem', borderRadius: '0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', appearance: 'auto', cursor: 'pointer' }}
-        >
-          {ALL_FOLDERS.map(f => (
-            <option key={f.id} value={f.id}>{f.name}</option>
-          ))}
-        </select>
-
-      
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'auto' }}>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button className="sidebar-item" style={{ padding: '0.4rem 0.8rem', background: '#f1f5fslate-1009', fontSize: '0.8rem' }} onClick={() => updateQuestion(q.id, { status: q.status === 'solved' ? 'unsolved' : 'solved' })}>
-            {q.status === 'solved' ? <CheckCircle size={14} color="#10b981" /> : <Circle size={14} color="#cbd5e1" />}
-          </button>
-          <a href={q.url} target="_blank" rel="noreferrer" className="sidebar-item" style={{ padding: '0.4rem 0.8rem', background: '#f8fafc' }}>
-            <ExternalLink size={14} color="#000" />
-          </a>
-        </div>
-        <div style={{ position: 'relative' }}>
-          <button className="sidebar-item" style={{ padding: '0.4rem 0.8rem', background: 'transparent' }} onClick={() => setActivePopover(activePopover === `deleteQuestion-${q.id}` ? null : `deleteQuestion-${q.id}`)}>
-            <Trash2 size={16} color="#ef4444" />
-          </button>
-          <AnimatePresence>
-             {activePopover === `deleteQuestion-${q.id}` && (
-               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} 
-                           style={{ position: 'absolute', bottom: '100%', right: 0, marginBottom: '0.5rem', background: '#fff', padding: '1rem', borderRadius: '1rem', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', zIndex: 100, width: '220px' }}>
-                 <p style={{ fontWeight: '800', marginBottom: '1rem', fontSize: '0.9rem' }}>Delete this question?</p>
-                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                   <button className="btn sidebar-item" style={{ background: '#f1f5f9', flex: 1, padding: '0.4rem' }} onClick={() => setActivePopover(null)}>Cancel</button>
-                   <button className="btn sidebar-item" style={{ background: '#ef4444', color: '#fff', flex: 1, padding: '0.4rem' }} onClick={() => confirmDeleteAction('question', q.id)}>Delete</button>
-                 </div>
-               </motion.div>
-             )}
-          </AnimatePresence>
-        </div>
-      </div>
-    </motion.div>
+    </div>
   );
 
   return (
     <div className="app-layout">
       <AnimatePresence>
         {!hasEntered && (
-          <LandingScreen onEnter={() => {
-            setHasEntered(true);
-            sessionStorage.setItem('hasEntered', 'true');
-          }} />
+          <LandingScreen onEnter={() => { setHasEntered(true); sessionStorage.setItem('hasEntered', 'true'); }} />
         )}
       </AnimatePresence>
 
       {renderToast()}
-      
-      <div className={`main-container animate-slide ${!hasEntered ? 'blur-sm' : ''}`}>
+
+      <div className={`main-container ${!hasEntered ? 'blur-sm' : ''}`}>
         <aside className="sidebar">
-          <div className="sidebar-logo" onClick={() => setView('home')} style={{ cursor: 'pointer' }}>CN.Track</div>
-          <nav className="sidebar-menu">
-            <div className={`sidebar-item ${view === 'home' ? 'active' : ''}`} onClick={() => setView('home')}>
-              <LayoutGrid size={20} /> Dashboard
-            </div>
-            <div className={`sidebar-item ${selectedFolder === 'all' && view === 'dashboard' ? 'active' : ''}`} onClick={() => { setView('dashboard'); setSelectedFolder('all'); }}>
-              <Hash size={20} /> All Lab
-            </div>
-            <div className={`sidebar-item ${selectedFolder === 'starred' ? 'active' : ''}`} onClick={() => { setView('dashboard'); setSelectedFolder('starred'); }}>
-              <Star size={20} /> Favorites
-            </div>
-          </nav>
+          <div className="sidebar-logo" onClick={() => setView('home')} style={{ cursor: 'pointer' }}>QS.Dash</div>
           
-          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-             <div>
-               <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: '800', letterSpacing: '1px', marginBottom: '1.5rem' }}>POPULAR</p>
-               <div className="folder-list" style={{ paddingLeft: 0, border: 'none' }}>
-                {folders.slice(0, 5).map(t => (
-                  <div key={t} className={`sidebar-item ${selectedFolder === t ? 'active' : ''}`} onClick={() => { setView('dashboard'); setSelectedFolder(t); }} style={{ fontSize: '0.9rem' }}>#{t}</div>
-                ))}
-              </div>
+          <nav className="sidebar-menu">
+            <div className={`sidebar-item ${selectedFolder === 'All' ? 'active' : ''}`}
+              onClick={() => { setView('dashboard'); setSelectedFolder('All'); }}>
+              <Hash size={18} /> All Questions
             </div>
+            {folders.map(f => (
+              <div key={f} className={`sidebar-item ${selectedFolder === f && view === 'dashboard' ? 'active' : ''}`}
+                onClick={() => { setView('dashboard'); setSelectedFolder(f); }}>
+                #{f}
+              </div>
+            ))}
+          </nav>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
-              
+          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {/* Delete current Subfolder if selected */}
+            {selectedFolder !== 'All' && selectedSubfolder !== 'All' && (
+              <div style={{ position: 'relative' }}>
+                <button className="sidebar-item" style={{ background: '#fee2e2', color: '#dc2626', width: '100%', fontSize: '0.75rem' }}
+                  onClick={() => setActivePopover(activePopover === 'delSF' ? null : 'delSF')}>
+                  <Trash2 size={14} /> Delete Subfolder: {selectedSubfolder}
+                </button>
+                <Pop open={activePopover === 'delSF'} from="top" style={{ width: '220px' }}>
+                  <p style={{ fontWeight: '800', marginBottom: '0.5rem', fontSize: '0.85rem', color: '#dc2626' }}>Confirm Delete?</p>
+                  <p style={{ fontSize: '0.75rem', marginBottom: '0.75rem', opacity: 0.7 }}>Questions will be moved to "All".</p>
+                  <button className="sidebar-item" style={{ background: '#dc2626', color: '#fff', width: '100%' }} 
+                    onClick={() => deleteSubfolder(selectedFolder, selectedSubfolder)}>Delete Subfolder</button>
+                </Pop>
+              </div>
+            )}
 
-              {view === 'dashboard' && selectedFolder !== 'all' && selectedFolder !== 'starred' && !PREBUILT_FOLDERS.find(f => f.id === selectedFolder) && (
-                <div style={{ position: 'relative' }}>
-                  <button className="sidebar-item hover-scale" style={{ background: '#ef4444', color: '#fff', width: '100%', justifyContent: 'flex-start' }} 
-                          onClick={() => setActivePopover(activePopover === 'deleteFolder' ? null : 'deleteFolder')}>
-                    <Trash2 size={16} style={{ marginRight: '0.5rem' }} /> Delete Folder
-                  </button>
-                  <AnimatePresence>
-                     {activePopover === 'deleteFolder' && (
-                       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} 
-                                   style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: '0.5rem', background: '#fff', padding: '1rem', borderRadius: '1rem', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', zIndex: 100, width: '100%' }}>
-                         <p style={{ fontWeight: '800', marginBottom: '1rem', fontSize: '0.9rem', color: '#ef4444' }}>Warning: This deletes the entire folder and everything inside it forever.</p>
-                         <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
-                           <button className="btn sidebar-item" style={{ background: '#000', color: '#fff', width: '100%' }} onClick={() => confirmDeleteAction('folder', selectedFolder)}>Delete Everything</button>
-                           <button className="btn sidebar-item" style={{ background: '#f1f5f9', width: '100%' }} onClick={() => setActivePopover(null)}>Keep It</button>
-                         </div>
-                       </motion.div>
-                     )}
-                  </AnimatePresence>
-                </div>
-              )}
+            {/* Delete current Folder if selected */}
+            {selectedFolder !== 'All' && selectedFolder !== 'General' && (
+              <div style={{ position: 'relative' }}>
+                <button className="sidebar-item" style={{ background: '#fee2e2', color: '#dc2626', width: '100%', fontSize: '0.75rem' }}
+                  onClick={() => setActivePopover(activePopover === 'delF' ? null : 'delF')}>
+                  <Trash2 size={14} /> Delete Folder: {selectedFolder}
+                </button>
+                <Pop open={activePopover === 'delF'} from="top" style={{ width: '220px' }}>
+                  <p style={{ fontWeight: '800', marginBottom: '0.5rem', fontSize: '0.85rem', color: '#dc2626' }}>Delete "{selectedFolder}"?</p>
+                  <p style={{ fontSize: '0.75rem', marginBottom: '0.75rem', opacity: 0.7 }}>ALL questions in this folder will be PERMANENTLY DELETED.</p>
+                  <button className="sidebar-item" style={{ background: '#dc2626', color: '#fff', width: '100%' }} 
+                    onClick={() => deleteFolder(selectedFolder)}>Delete Everything</button>
+                </Pop>
+              </div>
+            )}
+
+            <div style={{ position: 'relative' }}>
+              <button className="sidebar-item" style={{ background: '#f1f5f9', width: '100%' }}
+                onClick={() => setActivePopover(activePopover === 'addF' ? null : 'addF')}>
+                + Add Folder
+              </button>
+              <Pop open={activePopover === 'addF'} from="top" style={{ width: '220px' }}>
+                <p style={{ fontWeight: '800', marginBottom: '0.5rem', fontSize: '0.85rem' }}>New Folder Name</p>
+                <input style={inputStyle} value={nfName} onChange={e => setNfName(e.target.value)} placeholder="DSA, WAP..." />
+                <button className="sidebar-item" style={{ background: '#000', color: '#fff', width: '100%', marginTop: '0.5rem' }} onClick={addFolder}>Create</button>
+              </Pop>
             </div>
           </div>
         </aside>
 
         <main className="main-content">
-          {view === 'home' ? (
-            renderHomeScreen()
-          ) : (
-            <div className="animate-slide">
-              <header className="header-top">
-                <div className="nav-links">
-                  <span className="nav-link" onClick={() => setView('home')} style={{ cursor: 'pointer' }}>HOME</span>
-                  <span className="nav-link active">{selectedFolder.toUpperCase()}</span>
-                </div>
-                <div className="search-bar-modern">
-
-
-                  <div style={{ position: 'relative' }}>
-                    <button className="sidebar-item" style={{ background: '#000', color: '#fff', padding: '0.4rem 1rem' }} onClick={() => setActivePopover(activePopover === 'addQuestion' ? null : 'addQuestion')}>+ Question</button>
-                    <AnimatePresence>
-                       {activePopover === 'addQuestion' && (
-                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} 
-                                     style={{ position: 'absolute', top: '100%', right: 0, marginTop: '0.5rem', background: '#fff', padding: '1.25rem', borderRadius: '1rem', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', zIndex: 100, width: '350px' }}>
-                           <p style={{ fontWeight: '800', marginBottom: '1rem' }}>Add Question to "{selectedFolder}"</p>
-                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
-                             <input className="search-input" style={{ width: '100%', paddingLeft: '1rem', padding: '0.5rem 1rem' }} placeholder="Question Title..." value={newQuestion.title} onChange={(e) => setNewQuestion({...newQuestion, title: e.target.value})} />
-                             <input className="search-input" style={{ width: '100%', paddingLeft: '1rem', padding: '0.5rem 1rem' }} placeholder="URL Link..." value={newQuestion.url} onChange={(e) => setNewQuestion({...newQuestion, url: e.target.value})} />
-                             <input className="search-input" style={{ width: '100%', paddingLeft: '1rem', padding: '0.5rem 1rem' }} placeholder="Difficulty (Easy/Medium/Hard)" value={newQuestion.difficulty || ''} onChange={(e) => setNewQuestion({...newQuestion, difficulty: e.target.value})} />
-                           </div>
-                           <div style={{ display: 'flex', gap: '0.5rem' }}>
-                             <button className="btn sidebar-item" style={{ background: '#f1f5f9', flex: 1 }} onClick={() => setActivePopover(null)}>Cancel</button>
-                             <button className="btn sidebar-item" style={{ background: '#000', color: '#fff', flex: 1 }} onClick={handleAddQuestion}>Add</button>
-                           </div>
-                         </motion.div>
-                       )}
-                     </AnimatePresence>
-                  </div>
-                  
-                  <Search size={20} color="#64748b" />
-                  <input className="search-input" placeholder="Search lab..." value={search} onChange={(e) => setSearch(e.target.value)} />
-                </div>
-              </header>
-
-              <div className="folder-container">
-                {selectedFolder !== 'all' && selectedFolder !== 'starred' && (
-                   <div className="folder-row" style={{ paddingBottom: '1rem' }}>
-
-                   </div>
-                )}
-
-                <div className="question-grid">
-                  <AnimatePresence>
-                    {displayQuestions.map(q => renderQuestionCard(q))}
-                  </AnimatePresence>
-                </div>
-              </div>
-            </div>
-          )}
+          {view === 'home' ? renderHome() : renderDashboard()}
         </main>
       </div>
     </div>
