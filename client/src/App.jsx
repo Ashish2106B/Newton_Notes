@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Search, CheckCircle, Circle, Trash2, ExternalLink,
+  Search, CheckCircle, Circle, Trash2, ExternalLink, Home, Star,
   Hash, LayoutGrid, BookOpen, Globe, PenTool, BrainCircuit,
   AlertCircle, Check, User,
   Cpu, Database, Layers, Monitor, Target, Zap,
@@ -23,6 +23,7 @@ const DIFFICULTY_CFG = {
   Medium: { bg: '#fef9c3', text: '#ca8a04', dot: '#eab308' },
   Hard:   { bg: '#fee2e2', text: '#dc2626', dot: '#ef4444' },
 };
+const DIFF_ORDER = { Easy: 1, Medium: 2, Hard: 3 };
 
 const GRADIENTS = [
   'linear-gradient(135deg,#f43f5e,#fb923c)',
@@ -199,6 +200,7 @@ function App() {
   const [toast,            setToast]            = useState(null);
   const [activePopover,    setActivePopover]    = useState(null);
   const [nfName,           setNfName]           = useState('');
+  const [sortOrder,        setSortOrder]        = useState('none'); // 'none', 'asc', 'desc'
 
   // ── Persistence ──────────────────────────────────────────────────────────
   useEffect(() => { localStorage.setItem('nn_questions',  JSON.stringify(questions));  }, [questions]);
@@ -221,6 +223,9 @@ function App() {
       const parsed = JSON.parse(jsonInput);
       const items = Array.isArray(parsed) ? parsed : [parsed];
 
+      const isInSpecificFolder = selectedFolder !== 'All' && selectedFolder !== 'Important';
+      const isInSpecificSubfolder = selectedSubfolder !== 'All';
+
       const validItems = items
         .filter(item => item.title && item.url)
         .filter(item => !questions.find(q => q.url === item.url))
@@ -229,8 +234,8 @@ function App() {
           title: item.title,
           url: item.url,
           difficulty: item.difficulty || 'Medium',
-          folder: item.folder || 'General',
-          subfolder: item.subfolder || 'All',
+          folder: isInSpecificFolder ? selectedFolder : (item.folder || 'General'),
+          subfolder: isInSpecificSubfolder ? selectedSubfolder : (item.subfolder || 'All'),
           liked: item.liked || false,
           status: 'unsolved',
           createdAt: new Date().toISOString()
@@ -257,12 +262,18 @@ function App() {
     showToast('Folder Created');
   };
 
-  const updateQuestion = (id, data) =>
+  const updateQuestion = (id, data) => {
     setQuestions(prev => prev.map(q => q.id === id ? { ...q, ...data } : q));
+    setActivePopover(null);
+  };
 
   const deleteQuestion = (id) => {
     setQuestions(prev => prev.filter(q => q.id !== id));
     showToast('Removed');
+  };
+
+  const toggleStar = (id) => {
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, liked: !q.liked } : q));
   };
 
   const addSubfolder = (folderName, subName) => {
@@ -301,13 +312,29 @@ function App() {
 
   // ── Filtering Logic ────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    const base = questions.filter(q => 
-      (selectedFolder === 'All' || q.folder === selectedFolder) &&
-      (selectedSubfolder === 'All' || q.subfolder === selectedSubfolder)
-    );
-    if (!searchQuery) return base;
-    return base.filter(q => q.title.toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [questions, selectedFolder, selectedSubfolder, searchQuery]);
+    let base = questions.filter(q => {
+      if (selectedFolder === 'Important') return q.liked;
+      return (selectedFolder === 'All' || q.folder === selectedFolder) &&
+             (selectedSubfolder === 'All' || q.subfolder === selectedSubfolder);
+    });
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      base = base.filter(item => 
+        item.title.toLowerCase().includes(q) || 
+        item.folder.toLowerCase().includes(q) || 
+        item.subfolder.toLowerCase().includes(q)
+      );
+    }
+    
+    if (sortOrder !== 'none') {
+      base.sort((a, b) => {
+        const valA = DIFF_ORDER[a.difficulty] || 2;
+        const valB = DIFF_ORDER[b.difficulty] || 2;
+        return sortOrder === 'asc' ? valA - valB : valB - valA;
+      });
+    }
+    return base;
+  }, [questions, selectedFolder, selectedSubfolder, searchQuery, sortOrder]);
 
   const stats = useMemo(() => {
     const c = {};
@@ -347,16 +374,30 @@ function App() {
     const isDeleteOpen   = activePopover === `delete-${q.id}`;
 
     return (
-      <motion.div layout key={q.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card">
+      <div key={q.id} className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div style={{ flex: 1 }}>
-            <span style={{ fontSize: '0.65rem', fontWeight: '800', background: dc.bg, color: dc.text, padding: '0.15rem 0.5rem', borderRadius: '1rem', border: `1px solid ${dc.dot}`, textTransform: 'uppercase' }}>
-              {q.difficulty}
-            </span>
-            <h3 style={{ marginTop: '0.6rem', fontSize: '1.2rem', fontWeight: '900', color: '#000', lineHeight: '1.4' }}>{q.title}</h3>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: '800', background: dc.bg, color: dc.text, padding: '0.15rem 0.5rem', borderRadius: '1rem', border: `1px solid ${dc.dot}`, textTransform: 'uppercase' }}>
+                {q.difficulty}
+              </span>
+              {q.subfolder !== 'All' && (
+                <span style={{ fontSize: '0.65rem', fontWeight: '800', background: '#e0e7ff', color: '#4338ca', padding: '0.15rem 0.5rem', borderRadius: '1rem', border: '1px solid #6366f1' }}>
+                  {q.subfolder.toUpperCase()}
+                </span>
+              )}
+            </div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '900', color: '#000', lineHeight: '1.4' }}>{q.title}</h3>
           </div>
           
           <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+            {/* Star Toggle */}
+            <button className="sidebar-item" 
+              style={{ background: 'transparent', padding: '0.4rem', borderRadius: '0.5rem' }}
+              onClick={() => toggleStar(q.id)}>
+              <Star size={18} color={q.liked ? '#fbbf24' : '#64748b'} fill={q.liked ? '#fbbf24' : 'transparent'} />
+            </button>
+
             {/* Hidden Settings (Folder/Subfolder) */}
             <div style={{ position: 'relative' }}>
               <button className={`sidebar-item ${isSettingsOpen ? 'active' : ''}`}
@@ -402,7 +443,7 @@ function App() {
            style={{ background: '#000', color: '#fff', justifyContent: 'center', marginTop: '1.25rem' }}>
           Open Question <ExternalLink size={14} style={{ marginLeft: '0.5rem' }} />
         </a>
-      </motion.div>
+      </div>
     );
   };
 
@@ -419,6 +460,20 @@ function App() {
             <Search size={18} color="#64748b" />
             <input className="search-input" placeholder="Search questions..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
           </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.75rem', width: '100%', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 800, opacity: 0.5 }}>DIFFICULTY SORT:</span>
+          <button className={`sidebar-item ${sortOrder === 'asc' ? 'active' : ''}`}
+            style={{ padding: '0.4rem 1rem', fontSize: '0.75rem' }}
+            onClick={() => setSortOrder(sortOrder === 'asc' ? 'none' : 'asc')}>
+            Asc ↑
+          </button>
+          <button className={`sidebar-item ${sortOrder === 'desc' ? 'active' : ''}`}
+            style={{ padding: '0.4rem 1rem', fontSize: '0.75rem' }}
+            onClick={() => setSortOrder(sortOrder === 'desc' ? 'none' : 'desc')}>
+            Desc ↓
+          </button>
         </div>
 
         <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '1.5rem', width: '100%', border: '1px solid #e2e8f0' }}>
@@ -459,16 +514,14 @@ function App() {
       )}
 
       <div className="question-grid">
-        <AnimatePresence>
-          {filtered.length === 0 ? (
-            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '5rem 0', color: 'var(--text-secondary)' }}>
-              <AlertCircle size={48} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />
-              <p style={{ fontWeight: '800', fontSize: '1.2rem' }}>No questions found.</p>
-            </div>
-          ) : (
-            filtered.map(q => renderCard(q))
-          )}
-        </AnimatePresence>
+        {filtered.length === 0 ? (
+          <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '5rem 0', color: 'var(--text-secondary)' }}>
+            <AlertCircle size={48} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />
+            <p style={{ fontWeight: '800', fontSize: '1.2rem' }}>No questions found.</p>
+          </div>
+        ) : (
+          filtered.map(q => renderCard(q))
+        )}
       </div>
     </div>
   );
@@ -513,9 +566,17 @@ function App() {
           <div className="sidebar-logo" onClick={() => setView('home')} style={{ cursor: 'pointer' }}>QS.Dash</div>
           
           <nav className="sidebar-menu">
-            <div className={`sidebar-item ${selectedFolder === 'All' ? 'active' : ''}`}
+            <div className={`sidebar-item ${view === 'home' ? 'active' : ''}`}
+              onClick={() => setView('home')}>
+              <Home size={18} /> Home
+            </div>
+            <div className={`sidebar-item ${selectedFolder === 'All' && view === 'dashboard' ? 'active' : ''}`}
               onClick={() => { setView('dashboard'); setSelectedFolder('All'); }}>
               <Hash size={18} /> All Questions
+            </div>
+            <div className={`sidebar-item ${selectedFolder === 'Important' && view === 'dashboard' ? 'active' : ''}`}
+              onClick={() => { setView('dashboard'); setSelectedFolder('Important'); }}>
+              <Star size={18} /> Important
             </div>
             {folders.map(f => (
               <div key={f} className={`sidebar-item ${selectedFolder === f && view === 'dashboard' ? 'active' : ''}`}
@@ -527,7 +588,7 @@ function App() {
 
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {/* Delete current Subfolder if selected */}
-            {selectedFolder !== 'All' && selectedSubfolder !== 'All' && (
+            {view === 'dashboard' && selectedFolder !== 'All' && selectedSubfolder !== 'All' && (
               <div style={{ position: 'relative' }}>
                 <button className="sidebar-item" style={{ background: '#fee2e2', color: '#dc2626', width: '100%', fontSize: '0.75rem' }}
                   onClick={() => setActivePopover(activePopover === 'delSF' ? null : 'delSF')}>
@@ -543,7 +604,7 @@ function App() {
             )}
 
             {/* Delete current Folder if selected */}
-            {selectedFolder !== 'All' && selectedFolder !== 'General' && (
+            {view === 'dashboard' && !['All', 'General', 'Important'].includes(selectedFolder) && (
               <div style={{ position: 'relative' }}>
                 <button className="sidebar-item" style={{ background: '#fee2e2', color: '#dc2626', width: '100%', fontSize: '0.75rem' }}
                   onClick={() => setActivePopover(activePopover === 'delF' ? null : 'delF')}>
