@@ -1,8 +1,17 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
+const fs = require('fs');
+
 // On Render, use persistent disk at /data. Locally, use the server directory.
-const dbDir = process.env.NODE_ENV === 'production' ? '/data' : __dirname;
+let dbDir = process.env.NODE_ENV === 'production' ? '/data' : __dirname;
+
+// Fallback to __dirname if /data doesn't exist (e.g. Render Free Tier)
+if (process.env.NODE_ENV === 'production' && !fs.existsSync(dbDir)) {
+  console.warn('/data directory not found, falling back to __dirname. Data will be ephemeral!');
+  dbDir = __dirname;
+}
+
 const dbPath = path.join(dbDir, 'questions.db');
 const db = new Database(dbPath);
 

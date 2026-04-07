@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
+
 import { 
   Search, CheckCircle, Circle, Trash2, ExternalLink, 
   Star, Hash, LayoutGrid, Bookmark, ArrowRight,
@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
 const MagicBookImg = '/magic_book.png'; // Handled via public folder or relative path
 
 const PREBUILT_FOLDERS = [
@@ -111,14 +111,14 @@ const LandingScreen = ({ onEnter }) => {
 function App() {
   const [hasEntered, setHasEntered] = useState(sessionStorage.getItem('hasEntered') === 'true');
   const [view, setView] = useState('home'); 
-  const [questions, setQuestions] = useState([]);
-  const [topics, setTopics] = useState([]);
-  const [stats, setStats] = useState({});
+  const [questions, setQuestions] = useState(() => {
+    const saved = localStorage.getItem('newton_notes_data');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [search, setSearch] = useState('');
   const [selectedTopic, setSelectedTopic] = useState('all');
   const [activeSubtopic, setActiveSubtopic] = useState('All');
-  const [sortBy, setSortBy] = useState('latest');
-  const [loading, setLoading] = useState(true);
+  const [sortBy] = useState('latest');
   
   // Feedback states
   const [toast, setToast] = useState(null);
@@ -127,44 +127,82 @@ function App() {
   const [activePopover, setActivePopover] = useState(null); 
   const [newQuestion, setNewQuestion] = useState({ title: '', url: '', subtopic: '' });
   const [newFolder, setNewFolder] = useState({ name: '' });
-  const [subtopics, setSubtopics] = useState([]);
 
-  // Fetch Data
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [questionsRes, topicsRes, statsRes, subtopicsRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/questions`, {
-          params: { search, topic: selectedTopic === 'all' || selectedTopic === 'starred' ? 'all' : selectedTopic, starred: selectedTopic === 'starred' ? 'true' : 'false', sortBy }
-        }),
-        axios.get(`${API_BASE_URL}/topics`),
-        axios.get(`${API_BASE_URL}/stats`),
-        axios.get(`${API_BASE_URL}/subtopics`, { params: { topic: selectedTopic }})
-      ]);
-      setQuestions(questionsRes.data.filter(q => q.title !== '__FOLDER__'));
-      setTopics(topicsRes.data);
-      setSubtopics(subtopicsRes.data);
-      setStats(statsRes.data);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      showToast('Connection Refused', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Sync state to localStorage whenever questions change
+  useEffect(() => {
+    localStorage.setItem('newton_notes_data', JSON.stringify(questions));
+  }, [questions]);
 
   useEffect(() => {
-    fetchData();
-  }, [selectedTopic, search, view, sortBy]);
-
-  useEffect(() => {
+    // Reset active subtopic when swapping views or topics
     setActiveSubtopic('All');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTopic, view]);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
+
+  // Derived state calculations
+  const topics = useMemo(() => {
+    const uniqueTopics = new Set(questions.map(q => q.topic).filter(Boolean));
+    return Array.from(uniqueTopics);
+  }, [questions]);
+
+  const subtopics = useMemo(() => {
+    if (selectedTopic === 'all' || selectedTopic === 'starred') return [];
+    const uniqueSubtopics = new Set(
+      questions
+        .filter(q => q.topic === selectedTopic && q.subtopic && q.title !== '__FOLDER__')
+        .map(q => q.subtopic)
+    );
+    return Array.from(uniqueSubtopics);
+  }, [questions, selectedTopic]);
+
+  const stats = useMemo(() => {
+    const counts = {};
+    questions.forEach(q => {
+      if (q.title !== '__FOLDER__') {
+        counts[q.topic] = (counts[q.topic] || 0) + 1;
+      }
+      if (q.isStarred) {
+        counts['starred'] = (counts['starred'] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [questions]);
+
+  // Derived questions view
+  const displayQuestions = useMemo(() => {
+    let filtered = questions.filter(q => q.title !== '__FOLDER__');
+    
+    // Topic filtering
+    if (selectedTopic === 'starred') {
+      filtered = filtered.filter(q => q.isStarred);
+    } else if (selectedTopic !== 'all') {
+      filtered = filtered.filter(q => q.topic === selectedTopic);
+    }
+    
+    // Subtopic filtering
+    if (selectedTopic !== 'all' && selectedTopic !== 'starred' && activeSubtopic !== 'All') {
+      filtered = filtered.filter(q => (q.subtopic || 'General') === activeSubtopic);
+    }
+    
+    // Search filtering
+    if (search) {
+      const s = search.toLowerCase();
+      filtered = filtered.filter(q => 
+        q.title.toLowerCase().includes(s) || 
+        q.topic.toLowerCase().includes(s) || 
+        (q.subtopic && q.subtopic.toLowerCase().includes(s))
+      );
+    }
+    
+    // Sorting (can add sort implementation if needed, defaults to created order for now)
+    // Assuming new items are prepended in handlers
+    return filtered;
+  }, [questions, selectedTopic, activeSubtopic, search]);
 
   const ALL_FOLDERS = useMemo(() => {
     const foldersMap = {};
@@ -182,91 +220,66 @@ function App() {
     return Object.values(foldersMap);
   }, [topics]);
 
-  const updateQuestion = async (id, data) => {
-    try {
-      await axios.patch(`${API_BASE_URL}/question/${id}`, data);
-      setQuestions(prev => prev.map(q => q.id === id ? { ...q, ...data } : q));
-      fetchData();
-    } catch (error) {
-      showToast('Update Failed', 'error');
-    }
+  const updateQuestion = (id, data) => {
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, ...data } : q));
+    showToast('Updated successfully');
   };
 
-  const handleAddQuestion = async () => {
+  const handleAddQuestion = () => {
     if (!newQuestion.title || !newQuestion.url) {
       showToast('Title and URL required', 'error');
       return;
     }
-    try {
-      const payload = {
-         ...newQuestion,
-         topic: selectedTopic,
-         subtopic: newQuestion.subtopic || (activeSubtopic !== 'All' ? activeSubtopic : 'General')
-      };
-      await axios.post(`${API_BASE_URL}/save`, payload);
-      setActivePopover(null);
-      setNewQuestion({ title: '', url: '', subtopic: '' });
-      showToast('Question Added');
-      fetchData();
-    } catch (error) {
-      showToast('Failed to add item', 'error');
-    }
+    
+    const newId = Date.now().toString();
+    const payload = {
+       ...newQuestion,
+       id: newId,
+       topic: selectedTopic,
+       subtopic: newQuestion.subtopic || (activeSubtopic !== 'All' ? activeSubtopic : 'General'),
+       status: 'unsolved',
+       isStarred: false,
+       createdAt: new Date().toISOString()
+    };
+    
+    setQuestions(prev => [payload, ...prev]);
+    setActivePopover(null);
+    setNewQuestion({ title: '', url: '', subtopic: '' });
+    showToast('Question Added');
   };
 
-  const handleAddFolder = async () => {
+  const handleAddFolder = () => {
     if (!newFolder.name) {
       showToast('Folder name required', 'error');
       return;
     }
-    try {
-      const payload = view === 'home' 
-        ? { title: '__FOLDER__', url: '#', topic: newFolder.name } 
-        : { title: '__FOLDER__', url: '#', topic: selectedTopic, subtopic: newFolder.name };
-        
-      await axios.post(`${API_BASE_URL}/save`, payload);
-      setActivePopover(null);
-      setNewFolder({ name: '' });
-      showToast(view === 'home' ? 'Folder Created' : 'Sub-folder Created');
-      fetchData();
-    } catch (error) {
-      showToast('Failed to create folder', 'error');
-    }
+    
+    const newId = Date.now().toString();
+    const payload = view === 'home' 
+      ? { id: newId, title: '__FOLDER__', url: '#', topic: newFolder.name } 
+      : { id: newId, title: '__FOLDER__', url: '#', topic: selectedTopic, subtopic: newFolder.name };
+      
+    setQuestions(prev => [payload, ...prev]);
+    setActivePopover(null);
+    setNewFolder({ name: '' });
+    showToast(view === 'home' ? 'Folder Created' : 'Sub-folder Created');
   };
 
-  const confirmDeleteAction = async (type, targetId) => {
+  const confirmDeleteAction = (type, targetId) => {
     if (type === 'folder') {
-      try {
-        await axios.delete(`${API_BASE_URL}/topic/${targetId}`);
-        setActivePopover(null);
-        setView('home');
-        showToast('Folder Deleted');
-        fetchData();
-      } catch (e) {
-        showToast('Delete Failed', 'error');
-      }
-    } else if (type === 'subfolder') {
-      try {
-        await axios.delete(`${API_BASE_URL}/topic/${targetId.topic}/subtopic/${targetId.subtopic}`);
-        setActivePopover(null);
-        setActiveSubtopic('All');
-        showToast('Sub-Folder Deleted');
-        fetchData();
-      } catch (e) {
-        showToast('Delete Failed', 'error');
-      }
-    } else if (type === 'question') {
-      const id = targetId;
-      const originalQuestions = [...questions];
-      setQuestions(prev => prev.filter(q => q.id !== id));
+      setQuestions(prev => prev.filter(q => q.topic !== targetId));
       setActivePopover(null);
-      try {
-        await axios.delete(`${API_BASE_URL}/question/${id}`);
-        showToast('Removed Successfully');
-        fetchData();
-      } catch (error) {
-        setQuestions(originalQuestions);
-        showToast('Delete Failed', 'error');
-      }
+      setView('home');
+      showToast('Folder Deleted');
+    } else if (type === 'subfolder') {
+      setQuestions(prev => prev.filter(q => !(q.topic === targetId.topic && q.subtopic === targetId.subtopic)));
+      setActivePopover(null);
+      setActiveSubtopic('All');
+      showToast('Sub-Folder Deleted');
+    } else if (type === 'question') {
+      setQuestions(prev => prev.filter(q => q.id !== targetId));
+      setActivePopover(null);
+      showToast('Removed Successfully');
     }
   };
 
@@ -567,9 +580,7 @@ function App() {
 
                 <div className="question-grid">
                   <AnimatePresence>
-                    {questions
-                      .filter(q => activeSubtopic === 'All' || (q.subtopic || 'General') === activeSubtopic)
-                      .map(q => renderQuestionCard(q))}
+                    {displayQuestions.map(q => renderQuestionCard(q))}
                   </AnimatePresence>
                 </div>
               </div>
