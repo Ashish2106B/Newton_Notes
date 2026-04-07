@@ -498,12 +498,12 @@ function App() {
         <div style={{ display: 'flex', gap: '0.75rem', margin: '2rem 0', flexWrap: 'wrap' }}>
           {(subfolders[selectedFolder] || ['All']).map(sub => (
             <button key={sub} className={`sidebar-item ${selectedSubfolder === sub ? 'active' : ''}`}
-              style={{ borderRadius: '999px', fontSize: '0.8rem', padding: '0.5rem 1.25rem' }}
+              style={{ borderRadius: '999px', fontSize: '1rem', padding: '0.7rem 1.75rem', fontWeight: '800' }}
               onClick={() => setSelectedSubfolder(sub)}>
               {sub}
             </button>
           ))}
-          <button className="sidebar-item" style={{ borderRadius: '999px', fontSize: '0.8rem', background: '#f1f5f9' }}
+          <button className="sidebar-item" style={{ borderRadius: '999px', fontSize: '1rem', padding: '0.7rem 1.5rem', background: '#f1f5f9', fontWeight: '800' }}
             onClick={() => {
               const res = prompt('Subfolder name:');
               if (res) addSubfolder(selectedFolder, res);
@@ -571,8 +571,9 @@ function App() {
               <Home size={18} /> Home
             </div>
             <div className={`sidebar-item ${selectedFolder === 'All' && view === 'dashboard' ? 'active' : ''}`}
+              style={{ fontSize: '1.1rem', padding: '1rem 1.5rem', marginBottom: '0.5rem' }}
               onClick={() => { setView('dashboard'); setSelectedFolder('All'); }}>
-              <Hash size={18} /> All Questions
+              <Hash size={22} /> All Questions
             </div>
             <div className={`sidebar-item ${selectedFolder === 'Important' && view === 'dashboard' ? 'active' : ''}`}
               onClick={() => { setView('dashboard'); setSelectedFolder('Important'); }}>
